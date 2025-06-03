@@ -1,0 +1,68 @@
+This R markdown extracts the data for the RTDS 30-day mortality analysis.
+
+It directly reads the SQL file (//filewel01/RTDS/Analytical Work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/1_SQL/RTDS_90DM_CAS2504.sql)
+
+The result of the query is then written to a *.csv file and saved in the Stata directory (//filewel01/RTDS/Analytical Work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/2_Stata/Data)
+
+All of the paths used should be absolute and refer to directories in the RTDS drive on filewel01
+
+#Load packages
+```{r setup, include=FALSE}
+# Set the correct TIME ZONE, OTHERWISE THERE ARE PROBLEMS WITH DATES
+Sys.setenv(TZ='UTC')
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "R:/Analytical work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/1_SQL")
+library(readr)
+library(readr)
+library(tidyverse)
+library(rJava)
+library(DBI)
+library(NDRSAfunctions)
+```
+
+
+#Read Query to send from *.SQL file
+```{r, echo=TRUE}
+
+query <- read_file("RTDS_90DM_CAS2504.sql")
+query <-  gsub(";", "", query)
+
+```
+
+#Setup CAS connection
+```{r, echo=TRUE}
+################################################################################
+
+#Set CAS connection details
+
+setwd("R:/Analytical work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/1_SQL/")
+snapshot <- "cas2504l"
+CAS_user = "analysissarahlawton" #Update this to your CAS username
+remotes::install_github(repo = 'NHSE-NDRS/NDRSAfunctions', host = "api.github.com", upgrade = "always", auth_token = Sys.getenv("GH_token"), ref = "HEAD", build_opts=c("--no-lock"), build = FALSE)
+#Connect to CAS
+cas <- createConnection(username = CAS_user, sid = snapshot, port = 2006)
+
+
+
+################################################################################
+```
+
+
+#Run Query 
+```{r, echo=TRUE}
+## Running the query to get the 30 DM data
+
+query_result <- dbGetQueryOracle(cas, query)
+```
+
+#Save Query result to file
+```{r, echo=TRUE}
+setwd("R:/Analytical work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/2_Stata/Data/")
+write_csv(query_result, paste0("RTDS_90DM_CAS2504_", Sys.Date(), ".csv"), na="", append=FALSE, col_names=TRUE)
+```
+
+#Close CAS connection
+```{r, echo=TRUE}
+dbDisconnect(cas)
+```
+

@@ -1,0 +1,225 @@
+---
+title: "90DM DQ"
+date: "20253-05-19"
+output: html_document
+always_allow_html: yes
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 90% !important;
+  margin: auto;
+}
+</style>
+
+```{r set-options, echo=FALSE, cache=FALSE}
+#options(width = auto)
+```
+
+```{css, echo=FALSE}
+.btn {
+    border-width: 0 0px 0px 0px
+    text-transform: 
+}
+.btn-default {
+    color: #2ecc71;
+    background-color: #ffffff
+    border-color: #ffffff
+}
+
+.dataTables_filter {
+   float: left !important;
+}
+
+
+h1{
+  font-family: Segoe UI Light;
+  font-weight: normal;
+}
+h2,h3,h4{
+  font-family: Segoe UI Light;
+  font-weight: normal;
+}
+TOC{amgmm553
+  font-family: Arial Nova Light;
+  font-weight: normal;
+}
+p{
+  font-family: Arial;
+  font-weight: normal;
+} 
+
+```
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(here)
+library(tools)
+library(ggplot2)
+library(DT)
+library(NDRSAfunctions)
+library(readr)
+```
+
+
+
+
+```{r, get SQL files}
+modality_query <- read_file(here("SQL and export", "trusts_modality.sql"))
+modality_query <- gsub(";", "", modality_query)
+
+intent_query <- read_file(here("SQL and export", "trusts_intent.sql"))
+intent_query <- gsub(";", "", intent_query)
+
+sites_query <- read_file(here("SQL and export", "trusts_sites.sql"))
+sites_query <- gsub(";", "", sites_query)
+
+```
+```{r}
+
+snapshot <- "cas2504l"
+CAS_user = "analysissarahlawton" #Update this to your CAS username
+remotes::install_github(repo = 'NHSE-NDRS/NDRSAfunctions', host = "api.github.com", upgrade = "always", auth_token = Sys.getenv("GH_token"), ref = "HEAD", build_opts=c("--no-lock"), build = FALSE)
+
+#Connect to CAS
+conn <- createConnection(username = CAS_user, sid = snapshot, port = 2006)
+
+```
+```{r}
+trusts_modality <- dbGetQueryOracle(conn, modality_query)
+```
+
+```{r, include = FALSE}
+
+#trusts_modality <- read.csv(here("trusts_modality.csv"))
+
+trusts_modality <- trusts_modality %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP) %>%
+  mutate(episodes_year_group = sum(`COUNT(*)`)) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, RTTREATMENTMODALITY) %>%
+  mutate(episodes_year_group_modality = sum(`COUNT(*)`)) %>%
+  mutate(eng_modality_proportion = episodes_year_group_modality/episodes_year_group) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, PROVIDER_NAME) %>%
+  mutate(provider_episodes_year_group = sum(`COUNT(*)`)) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, RTTREATMENTMODALITY, PROVIDER_NAME) %>%
+  mutate(provider_episodes_year_group_modality = sum(`COUNT(*)`)) %>%
+  mutate(provider_modality_proportion = provider_episodes_year_group_modality/provider_episodes_year_group) %>%
+  ungroup() %>%
+  mutate(prop_diff = (provider_modality_proportion - eng_modality_proportion)) %>%
+  mutate(prop_percent_diff = (((provider_modality_proportion - eng_modality_proportion)/eng_modality_proportion)*100.00))
+
+
+```
+
+```{r, include=FALSE}
+table_colnames <- c("Provider Name", "Cancer Group", "Financial Year", "RT Modality", "Number of Provider Episodes (Modality)", "Total Number of Provider Episodes", "England Episodes (Modality)", "Total England Episodes", "Provider Modality Proportion", "England Modality Proportion", "Percent difference between Proportions")
+
+data_for_csv <- select(trusts_modality, PROVIDER_NAME, CANCER_GROUP, FINANCIALYEAR, RTTREATMENTMODALITY, provider_episodes_year_group_modality, provider_episodes_year_group, episodes_year_group_modality, episodes_year_group, provider_modality_proportion, eng_modality_proportion, prop_percent_diff)
+
+colnames(data_for_csv) <- table_colnames
+
+write.csv(data_for_csv, here("Trust_modality_DQ.csv"))
+```
+
+# Breakdown of Provider Modality
+
+```{r, echo=FALSE}
+datatable(select(trusts_modality, PROVIDER_NAME, CANCER_GROUP, FINANCIALYEAR, RTTREATMENTMODALITY, provider_episodes_year_group_modality, provider_episodes_year_group, episodes_year_group_modality, episodes_year_group, provider_modality_proportion, eng_modality_proportion, prop_percent_diff), colnames = table_colnames, options = list(scrollY=500, scrollX=TRUE, paging=FALSE))
+```
+
+```{r}
+trusts_intent <- dbGetQueryOracle(conn, intent_query)
+```
+
+```{r, include = FALSE}
+#trusts_intent <- read.csv(here("trusts_intent.csv"))
+trusts_intent <- trusts_intent %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP) %>%
+  mutate(episodes_year_group = sum(`COUNT(*)`)) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, RADIOTHERAPYINTENT) %>%
+  mutate(episodes_year_group_intent = sum(`COUNT(*)`)) %>%
+  mutate(eng_intent_proportion = episodes_year_group_intent/episodes_year_group) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, PROVIDER_NAME) %>%
+  mutate(provider_episodes_year_group = sum(`COUNT(*)`)) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, RADIOTHERAPYINTENT, PROVIDER_NAME) %>%
+  mutate(provider_episodes_year_group_intent = sum(`COUNT(*)`)) %>%
+  mutate(provider_intent_proportion = provider_episodes_year_group_intent/provider_episodes_year_group) %>%
+  ungroup() %>%
+  mutate(prop_diff = (provider_intent_proportion - eng_intent_proportion)) %>%
+  mutate(prop_percent_diff = (((provider_intent_proportion - eng_intent_proportion)/eng_intent_proportion)*100.00))
+
+
+```
+
+```{r, include=FALSE}
+table_colnames <- c("Provider Name", "Cancer Group", "Financial Year", "RT Intent", "Number of Provider Episodes (Intent)", "Total Number of Provider Episodes", "England Episodes (Intent)", "Total England Episodes", "Provider Intent Proportion", "England Intent Proportion", "Percent difference between Proportions")
+
+data_for_csv <- select(trusts_intent, PROVIDER_NAME, CANCER_GROUP, FINANCIALYEAR, RADIOTHERAPYINTENT, provider_episodes_year_group_intent, provider_episodes_year_group, episodes_year_group_intent, episodes_year_group, provider_intent_proportion, eng_intent_proportion, prop_percent_diff)
+
+colnames(data_for_csv) <- table_colnames
+
+write.csv(data_for_csv, here("Trust_intent_DQ.csv"))
+```
+
+
+# Breakdown of Provider Intent
+
+```{r, echo=FALSE}
+
+
+datatable(select(trusts_intent, PROVIDER_NAME, CANCER_GROUP, FINANCIALYEAR, RADIOTHERAPYINTENT, provider_episodes_year_group_intent, provider_episodes_year_group, episodes_year_group_intent, episodes_year_group, provider_intent_proportion, eng_intent_proportion, prop_percent_diff), colnames = table_colnames, options = list(scrollY=500, scrollX=TRUE, paging=FALSE))
+
+
+```
+
+```{r}
+trusts_sites <- dbGetQueryOracle(conn, sites_query)
+```
+
+```{r, include = FALSE}
+#trusts_sites <- read.csv(here("trusts_sites.csv"))
+trusts_sites <- trusts_sites %>%
+  group_by(FINANCIALYEAR) %>%
+  mutate(episodes_year = sum(`COUNT(*)`)) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP) %>%
+  mutate(episodes_year_group = sum(`COUNT(*)`)) %>%
+  mutate(eng_site_proportion = episodes_year_group/episodes_year) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, PROVIDER_NAME) %>%
+  mutate(provider_episodes_year = sum(`COUNT(*)`)) %>%
+  ungroup() %>%
+  group_by(FINANCIALYEAR, CANCER_GROUP, PROVIDER_NAME) %>%
+  mutate(provider_episodes_year_group = sum(`COUNT(*)`)) %>%
+  mutate(provider_site_proportion = provider_episodes_year_group/provider_episodes_year) %>%
+  ungroup() %>%
+  mutate(prop_diff = (provider_site_proportion - eng_site_proportion)) %>%
+  mutate(prop_percent_diff = (((provider_site_proportion - eng_site_proportion)/eng_site_proportion)*100.00))
+
+
+```
+
+```{r, include = FALSE}
+table_colnames <- c("Provider Name", "Cancer Group", "Financial Year", "Number of Provider Episodes (Site)", "Total Number of Provider Episodes", "England Episodes (Site)", "Total England Episodes", "Provider Site Proportion", "England Site Proportion", "Percent difference between Proportions")
+
+data_for_csv <- select(trusts_sites, PROVIDER_NAME, CANCER_GROUP, FINANCIALYEAR, provider_episodes_year_group, provider_episodes_year, episodes_year_group, episodes_year, provider_site_proportion, eng_site_proportion, prop_percent_diff)
+
+colnames(data_for_csv) <- table_colnames
+
+write.csv(data_for_csv, here("Trust_site_DQ.csv"))
+```
+
+# Cancer Site Breakdown
+
+```{r, echo=FALSE}
+datatable(select(trusts_sites, PROVIDER_NAME, CANCER_GROUP, FINANCIALYEAR, provider_episodes_year_group, provider_episodes_year, episodes_year_group, episodes_year, provider_site_proportion, eng_site_proportion, prop_percent_diff), colnames = table_colnames, options = list(scrollY=500, scrollX=TRUE, paging=FALSE))
+
+
+```
+
