@@ -1,0 +1,519 @@
+---
+title: "![NDRS](./NDRS_NHS_96dpi.png) <br><br><br><br> 90-day mortality after radical radiotherapy for lung cancers in England"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: true
+  word_document:
+    toc: yes
+    toc_depth: '2'
+always_allow_html: yes
+---
+
+
+<style type="text/css">
+.main-container {
+  margin: auto;
+}
+body {
+text-align: justify}
+</style>
+
+```{r set-options, echo=FALSE, cache=FALSE}
+options(width = 1000)
+```
+
+```{css, echo=FALSE}
+.btn {
+    border-width: 0 0px 0px 0px
+    text-transform: 
+}
+.btn-default {
+    color: #2ecc71;
+    background-color: #ffffff
+    border-color: #ffffff
+}
+
+.dataTables_filter {
+   float: left !important;
+}
+
+img{
+  position: absolute;
+  right: 0; 
+  top: 0;
+  float: none;
+}
+
+h1{
+  font-family: Segoe UI Light;
+  font-weight: normal;
+}
+h2,h3,h4{
+  font-family: Segoe UI Light;
+  font-weight: normal;
+}
+TOC{
+  font-family: Arial Nova Light;
+  font-weight: normal;
+}
+p{
+  font-family: Arial;
+  font-weight: normal;
+} 
+
+
+```
+
+```{r setup, include=FALSE, echo=FALSE }
+# Set options for output
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,echo=FALSE)
+
+
+# Load libraries
+library(dplyr)
+library(crosstalk)
+library(data.table)
+library(DT)
+library(DiagrammeR)
+library(forcats)
+library(haven)
+library(htmltools)
+library(ggplot2)
+library(tidytext)
+library(gridExtra)
+library(ggpubr)
+library(readxl)
+library(plotly)
+library(stringr)
+
+#Predefined plotting colour palette, this should be colourblind friendly
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# Functions
+read_funnel_data <- function(file) {
+  fun_data <- read_dta(file)
+  colnames(fun_data) <- gsub('_', '', colnames(fun_data))
+  return(fun_data)
+}
+
+plotly_crude_funnel <- function(dat_shared, dat, yoi, xlim_upper, ylim_upper){
+  dat <- dat %>% filter(fyear==yoi)
+  funnel <- dat_shared %>%
+    ggplot() +
+    geom_line(size = 1, aes(x=xvar, y = ub5, color = "2SD Limit", group=1), linetype = 2) +
+    geom_line(size = 1, aes(x=xvar, y = lb5, color = "2SD Limit", group=1), linetype = 2) +
+    geom_line(size = 1, aes(x=xvar, y = ub2, color = "3SD Limit", group=1), linetype = 3) +
+    geom_line(size = 1, aes(x=xvar, y = lb2, color = "3SD Limit", group=1), linetype = 3) +
+    geom_hline(lty=1, aes(yintercept=dat$allenglandndm[2], color= "England Rate")) +
+    geom_point(data = dat_shared, size = 2, aes(x=xvar, y=providerndm, color = "NHS Trust", 
+                                                text=paste("Number of episodes:", xvar,
+                                                           "<br>",
+                                                           "90-Day Mortality (%):", round(providerndm,2),
+                                                           "<br>",
+                                                           providername))) +
+    scale_color_manual(name = "",
+                       breaks = c("2SD Limit", "3SD Limit", "England Rate", "Data"),
+                       values=c("#54CBCD", "#54CBCD", "red", "black"), 
+                       labels = c("2SD Limit", "3SD Limit", "England Rate", "Data")) +
+    scale_y_continuous(limits = c(0,35), breaks = seq(0, 30, 10), expand = c(0,0)) + 
+    theme(
+      legend.position="bottom", 
+      plot.title=element_text(hjust=0.5),
+      plot.margin = margin(10,10,10,10)
+    ) +
+    theme_minimal(base_size=12) +
+    labs(#title = paste0("Financial Year ", substr(fun_dat$fyear[2],3,4),"/",as.numeric(substr(fun_dat$fyear[2],3,4))+1), 
+      y = str_wrap("Crude 90-Day Mortality (%)",22), x = "Number of patients with radical radiotherapy") +
+    #ylim(0,30) +
+    xlim(0,xlim_upper)
+  
+  shared_funnel_ply <- ggplotly(funnel, tooltip=c("text"))
+  shared_funnel_ply <- shared_funnel_ply %>%
+    style(line = list(dash="dot", color= "#54CBCD", shape="spline"), traces = 3:4) %>%
+    style(line = list(dash="dash", color= "#54CBCD", shape="spline"), traces = 1:2)
+  
+for (i in 1:length(shared_funnel_ply$x$data)){
+    shared_funnel_ply$x$data[[i]]$legendgroup <- paste0("crude",yoi)
+  }
+  shared_funnel_ply <- style(shared_funnel_ply, legendgrouptitle=list(text="Funnel Plot"))
+  return(shared_funnel_ply)
+}
+
+intent_plot <- function(data, yoi, cancergroup){
+
+plot_intent <- 
+    data %>%
+  #arrange(match(rtintent, c("Other/Unknown", "Palliative", "Radical"))) %>%
+  ggplot( 
+      aes(
+          x=fct_reorder(providername, provider_rank_value),  
+          y=provider_intent_episodes, 
+          group=providername, 
+          fill=rtintent,
+          text = c(paste(providername,
+                         "<br>",
+                         "Radiotherapy Intent:",
+                         rtintent,
+                         "<br>",
+                         "Episodes:",
+                         paste0(round(provider_intent_episodes/provider_episodes*100.00,2), " %")
+                         )
+                   )
+      )
+    ) +
+  geom_col(position='fill', width=0.75) +
+    ylim(0,100) +
+    scale_y_continuous(labels=scales::percent, name = "Episodes (%)") +
+    scale_x_discrete(name = "") +
+    scale_fill_manual(values = cbPalette, name = "") +
+    
+    theme_minimal(base_size=12)
+
+  shared_intent_ply <- ggplotly(plot_intent, tooltip = c("text")) %>% layout(xaxis=list(tickangle=-75))
+  
+  for (i in 1:length(shared_intent_ply$x$layout$xaxis$ticktext)){
+      shared_intent_ply$x$layout$xaxis$ticktext[i] <- str_trunc(shared_intent_ply$x$layout$xaxis$ticktext[i], 30)
+  }
+  
+  for (i in 1:length(shared_intent_ply$x$data)){
+      shared_intent_ply$x$data[[i]]$legendgroup <- paste0("Radiotherapy Intent", yoi)
+  }
+  
+  shared_intent_ply <- style(shared_intent_ply, legendgrouptitle=list(text="Radiotherapy Intent"))
+  
+  return(shared_intent_ply)
+}
+```
+
+```{r, echo= FALSE, include=FALSE}
+#Loading the Data
+
+dat_epi <- read_dta("//corp.internal/ndrs/RTDS/Analytical Work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/2_Stata/Output/Excl_DQ_Trust/RTDS_90DM_CAS2504_provider_analysis_lung.dta")
+
+#Crude funnel data excluding DQ trusts
+crude_path <- "//corp.internal/ndrs/RTDS/Analytical Work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/2_Stata/Output/Excl_DQ_Trust/RTDS_90DM_CAS2504_provider_crude_funnel_lung.dta"
+
+
+crude_funnels <- read_funnel_data(crude_path)
+
+#Providers based on crude funnel
+orgs <- dat_epi %>% select(provider_name, orgcodeprovider) %>% distinct(provider_name, orgcodeprovider) 
+orgs <- orgs[orgs$orgcodeprovider != "",]
+
+#Summary data
+dat_summ <- dat_epi %>%
+  select(fyear, orgcodeprovider, provider_name, all_england_ndm, provider_ndm, provider_lowerbound, provider_upperbound) %>%
+  distinct() %>%
+  arrange(fyear, provider_ndm) %>%
+  group_by(fyear) %>%
+  mutate(provider_rk = row_number()) %>%
+  ungroup() #%>%
+  #mutate(d_prop = adj_prop - provider_ndm)
+
+#All England summary data
+all_england <- select(dat_summ, fyear, all_england_ndm) %>% unique()
+
+#Crude rate summary data for England
+summ_dat <- dat_summ %>% 
+    group_by(fyear) %>% 
+    summarise(eng_ndm=mean(all_england_ndm), 
+              min_ndm=min(provider_ndm), 
+              max_ndm=max(provider_ndm), 
+              median_ndm=median(provider_ndm))
+
+  summ_dat <- summ_dat %>% 
+    mutate(across(-fyear, ~.x/100.00))
+  summ_dat$fyear <- paste0("20", substr(summ_dat$fyear,3,4),"/", as.numeric(substr(summ_dat$fyear,3,4))+1)
+  summ_col_names = c("Financial Year", "England (%)", "Lowest Provider (%)", "Highest Provider (%)", "Median Provider (%)")
+
+all_england_crude_table <- DT::datatable(summ_dat, colnames = summ_col_names, rownames=FALSE) %>% formatPercentage(c("eng_ndm", "min_ndm", "max_ndm", "median_ndm"), 1)
+
+table_dat <- crude_funnels[,c("fyear", "orgcodeprovider", "providername", "providerndm", "allenglandndm", "lb2", "ub2", "outlier")]
+
+table_dat <- table_dat %>% filter(!is.na(fyear)) %>% filter(orgcodeprovider != "")
+
+table_dat <- table_dat %>% mutate(across(c(providerndm, allenglandndm, lb2, ub2), ~ .x/100.00))
+
+table_dat$fyear <-paste0("20", substr(table_dat$fyear,3,4),"/", as.numeric(substr(table_dat$fyear,3,4))+1)
+
+table_dat <- arrange(table_dat, fyear, providername)
+
+table_colnames = c(
+  "Financial Year",
+  "Trust Code",
+  "Trust Name",
+  "Crude 90-day Mortality (%)",
+  "England 90-day Mortality (%)", 
+  "Lower 3SD Limit",
+  "Upper 3SD Limit",
+  "Crude outlier Status")
+
+all_provider_table <- DT::datatable(table_dat, colnames = table_colnames, rownames=FALSE, options = list(scrollY=500, scrollX=TRUE, paging=FALSE)) %>% formatPercentage(c("providerndm","allenglandndm", "lb2", "ub2"), 1)
+
+```
+
+```{r}
+#Needs to put as absolute, report not setup to use here()D
+trust_intent <- read.csv("//corp.internal/ndrs/RTDS/Analytical Work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/3_DataQuality/Trust_intent_DQ.csv")
+
+trust_intent <- rename(trust_intent, 
+                       providername = Provider.Name,
+                       cancer_group = Cancer.Group,
+                       fyear = Financial.Year,
+                       rtintent = RT.Intent,
+                       provider_intent_episodes = Number.of.Provider.Episodes..Intent.,
+                       provider_episodes = Total.Number.of.Provider.Episodes,
+                       england_intent_episodes = England.Episodes..Intent.,
+                       england_episodes = Total.England.Episodes
+                       )
+```
+
+```{r}
+
+intent_plot_data <- trust_intent %>% select(-Provider.Intent.Proportion, -Percent.difference.between.Proportions, -England.Intent.Proportion)
+
+intent_plot_data <- intent_plot_data %>%
+  mutate(rtintent = case_when(
+    rtintent == 1 ~ "Palliative",
+    rtintent == 2 ~ "Radical",
+    rtintent == 3 ~ "Other/Unknown",
+    is.na(rtintent) ~ "Other/Unknown"
+  ))
+
+intent_plot_data <- select(intent_plot_data, -X) %>% 
+  group_by(providername, cancer_group, fyear, rtintent, provider_episodes, england_episodes) %>%
+  mutate(provider_intent_episodes = sum(provider_intent_episodes)) %>%
+  mutate(england_intent_episodes = sum(england_intent_episodes)) %>%
+  ungroup() %>%
+  distinct()
+
+intent_levels <- c("Radical", "Palliative", "Other/Unknown")
+
+intent_plot_data <- intent_plot_data %>% 
+  mutate(rtintent = factor(rtintent, levels = intent_levels))
+
+intent_plot_data <- intent_plot_data %>% left_join(
+  intent_plot_data %>%
+    filter(rtintent == "Radical") %>% 
+    mutate(provider_rank_value = provider_intent_episodes/provider_episodes) %>%
+    select(providername, cancer_group, fyear, provider_rank_value)
+)
+
+included_providers_2023 <- intent_plot_data %>% filter(fyear == 2023, rtintent == "Radical", cancer_group == "lung") %>% filter(provider_intent_episodes >= 10) %>% select(providername, fyear, cancer_group) %>% distinct()
+included_providers_2022 <- intent_plot_data %>% filter(fyear == 2022, rtintent == "Radical", cancer_group == "lung") %>% filter(provider_intent_episodes >= 10) %>% select(providername, fyear, cancer_group) %>% distinct()
+
+
+
+```
+
+```{r}
+#These create the SharedData items to "link" the data sets and allows for highlighting within the plots
+crude_shared_2023 <- filter(crude_funnels, fyear==2023) %>% SharedData$new(.,key~providername, group ="Select Trust(s) for 2022/23 below: ")
+crude_shared_2022 <- filter(crude_funnels, fyear==2022) %>% SharedData$new(.,key~providername, group ="Select Trust(s) for 2023/24 below: ")
+
+intent_shared_2023 <- filter(intent_plot_data, fyear==2023, cancer_group == "lung")%>% inner_join(.,included_providers_2023) %>% arrange(match(rtintent, c("Other/Unknown", "Palliative", "Radical"))) %>% SharedData$new(.,key~providername, group ="Select Trust(s) for 2023/24 below: ")
+intent_shared_2022 <- filter(intent_plot_data, fyear==2022, cancer_group == "lung")%>% inner_join(.,included_providers_2022) %>% arrange(match(rtintent, c("Other/Unknown", "Palliative", "Radical"))) %>% SharedData$new(.,key~providername, group ="Select Trust(s) for 2022/23 below: ")
+
+```
+
+
+```{r}
+#Creating the plot objects
+crude_funnel_2023 <- plotly_crude_funnel(crude_shared_2023, crude_funnels, 2023, 950, 30)
+crude_funnel_2022 <- plotly_crude_funnel(crude_shared_2022, crude_funnels, 2022, 950, 30)
+
+
+intent_plot_2023 <- intent_plot(intent_shared_2023, 2023, "lung")
+intent_plot_2022 <- intent_plot(intent_shared_2022, 2022, "lung")
+
+```
+
+------------------------------------------------------------------------
+
+# Introduction
+
+The Radiotherapy Data Set (RTDS) is the national standard for collecting consistent and comparable data across all English NHS radiotherapy providers (or private facilities where delivery is funded by the NHS) to provide timely data to inform the planning, provision, commissioning and improvement of radiotherapy services across the NHS.
+
+This report has been produced by the National Disease Registration Service (NDRS) team to enable clinicians to understand their radical radiotherapy practice and outcomes and provide opportunities for data quality improvement. This data and analysis supports the External Beam Radiotherapy Specialised Services Quality Dashboards (SSQDs) for NHS England. It presents the Lung cancer 90-day mortality after radical radiotherapy metric relating to patients treated in England.
+
+The 90-day mortality after radical radiotherapy metric was initially produced for lung and head and neck cancer radiotherapy to determine the validity of the metric in these tumour groups. The metric presented in this report is a quality indicator intended for assessing the appropriate and safe delivery of radical radiotherapy for lung cancer. Radical radiotherapy for lung cancer can result in life-threatening side-effects, particularly when combined with systemic anti-cancer therapy.  Equally, it must be recognised that patients with lung cancer often suffer with other significant medical conditions which either alone, or in combination with cancer treatment, can lead to death within 90 days of the start of radical radiotherapy. The metric does not incorporate baseline patient characteristics (such as cancer stage, age or co-morbidity) or distinguish between treatment related and co-morbidity related death. Consequently, a provider with high use of radical radiotherapy (sometimes referred to as more aggressive treatment decision-making) may be found to have higher than expected 90 day mortality in the same way as one where support services are less robust than necessary. As such, where a provider is identified as outlying, there is a need to consider these factors when considering how best to incorporate this information into future decision-making and service planning.
+
+The analysis presented in this report considers all patients receiving radical external beam radiotherapy delivered at English NHS Trusts between 1st April 2022 and 31st March 2024. It includes only patients treated for lung cancer (ICD10 C33-C34). Crude 90-day mortality rates were calculated based on the first radical radiotherapy episode a patient had in a year and are reported for each financial year and individual NHS Trust. The crude 90-day mortality rate is the percentage of patients who died within 90 days of the start of their first radiotherapy episode in the financial year.
+
+Metrics included:
+
+-   Yearly crude rate for 90-day mortality after radical radiotherapy
+
+Analyses have been presented as funnel plots and in data tables.
+
+**For more detailed methodological information and guidance on data interpretation, please see the supplementary methodological documentation.**
+
+------------------------------------------------------------------------
+
+# Key messages
+
+In total there were 14,875 lung cancer patients treated with radical radiotherapy entered into the analysis for the 2 year period.
+
+- During the two financial years 2022/23 - 2023/24, the English average crude 90-day mortality rate after radical radiotherapy fluctuated between 4.0% and 4.8%
+
+- The crude 90-day mortality rates by NHS Trust varied from 0% to 22.3% in 2022/23. In 2023/24, crude 90-day mortality rates by NHS trust varied from 0% to 16%
+
+- Across all NHS Trusts included in the analysis, some NHS Trusts were identified as outliers on the basis of their crude 90-day mortality rate. There was 1 outlier NHS Trust identified for 2022/23 and 2 outlier NHS Trusts identified for 2023/24.
+
+- The yearly number of radical radiotherapy patients included in the analysis varied by NHS Trust from 16 to 914 in 2022/23 and 22 to 928 in 2023/24.
+
+- Fifty NHS trusts were included in the analysis for 2022/23 and 49 in 2023/24 as a result of trust mergers.
+
+------------------------------------------------------------------------
+
+# Plots
+
+Crude 90-day mortality rates for NHS Trusts are presented on funnel plots. The funnel plots are scatter plots of NHS Trust level 90-day mortality rates against the number of radical radiotherapy patients seen at each respective Trust. The red horizontal line is the England average crude 90-day mortality rate. Two control limits at 2 standard deviations (SD) (≈95% control limits) and 3SD (≈99.8% control limits) are included on the funnel plots indicating whether or not the observed 90-day mortality rates exceed the expected variation. The 3SD control limits are used to define the NHS Trusts' outlier status. 
+
+Across the English NHS Trusts there was variation in the distribution of radiotherapy intent for lung cancer treatments. The distribution of radiotherapy intent for each Trust is shown below on a stacked bar graph as percentage of episodes by recorded radiotherapy intent. All lung cancer radiotherapy episodes (including all radiotherapy modalities, i.e. teletherapy and brachytherapy) delivered by the Trust between 1st April 2023 and 31st March 2024 are included for these graphs which are plotted for individual data years. 
+
+## Crude 90-day mortality rates {- .tabset .tabset-fade .tabset-pills}
+
+Each data point on the funnel plot represents an English NHS Trust. Hover over data points for more information.  
+
+**To find your specific Trust please select from the drop down list or type a keyword in the search box below. Multiple Trusts can be selected.**
+
+------------------------------------------------------------------------
+
+### **2023/24** {-}
+
+```{r, out.height = "600px", out.width="850px"}
+crude_funnel_2023 %>%
+  highlight(on = "plotly_click",
+            off = "plotly_doubleclick",
+            selectize=TRUE, 
+            persistent=TRUE, 
+            opacityDim=0.5,
+            selected = attrs_selected(showlegend = FALSE,
+              marker = list(line=list(color="red")))) %>%
+  config(displaylogo=FALSE, displayModeBar=TRUE, modeBarButtonsToRemove = c('lasso2d','hoverCompareCartesian'))
+```
+
+
+<p style = "font-size:30px; font-weight:normal; font-family:Segoe UI Light">Radiotherapy intent distribution</p>
+```{r, out.height = "600px", out.width="850px"}
+intent_plot_2023 %>% 
+  highlight(
+    on = "plotly_click",
+    off = "plotly_doubleclick",
+    persistent = TRUE, 
+    selectize = FALSE, 
+    selected = attrs_selected(showlegend = FALSE)
+  ) %>%
+  config(displaylogo = FALSE, displayModeBar = TRUE, modeBarButtonsToRemove = c('lasso2d', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d','zoom2d'))
+```
+
+------------------------------------------------------------------------
+
+### **2022/23** {-}
+
+```{r, out.height = "600px", out.width="850px"}
+crude_funnel_2022 %>%
+  highlight(on = "plotly_click",
+            off = "plotly_doubleclick",
+            selectize=TRUE, 
+            persistent=TRUE, 
+            opacityDim=0.5,
+            selected = attrs_selected(showlegend = FALSE,
+              marker = list(line=list(color="red")))) %>%
+  config(displaylogo=FALSE, displayModeBar=TRUE, modeBarButtonsToRemove = c('lasso2d','hoverCompareCartesian'))
+```
+
+
+<p style = "font-size:30px; font-weight:normal; font-family:Segoe UI Light">Radiotherapy intent distribution</p>
+```{r, out.height = "600px", out.width="850px"}
+intent_plot_2022 %>% 
+  highlight(
+    on = "plotly_click",
+    off = "plotly_doubleclick",
+    persistent = TRUE, 
+    selectize = FALSE, 
+    selected = attrs_selected(showlegend = FALSE)
+  ) %>%
+  config(displaylogo = FALSE, displayModeBar = TRUE, modeBarButtonsToRemove = c('lasso2d', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d','zoom2d'))
+```
+
+### Exploring the funnel plots {-}
+
+To explore the plots in more detail, please see the options below:
+
+-   A specific NHS Trust can be highlighted by clicking within the search bar at the top of the plot and: 
+    -   Selecting from the drop down menu
+    -   Entering the NHS Trust's name directly and pressing `Enter`
+-   Hovering the pointer over a data point will display detailed information for that point
+-   There are several buttons which appear when hovering over the plot area
+    -   The Zoom tool can be used to zoom into an area of the plot by clicking and drawing a box
+    -   The Pan tool can be used to move the plot area, while clicking and holding, the plot area can be dragged to another area
+    -   The Box tool will highlight all of the NHS Trusts within the drawn box
+    -   The Autoscale tool will automatically scale the x and y axis of the plot
+    -   The Reset axis tool will reset the plot to the original scale
+-   Double clicking within the blank plot area will return the plot to its original state
+-   A high-resolution image of the figure can be exported by hovering over the plot area and clicking on the camera icon. This will download the figure in *.PNG format, including any selections or changes to the plot zoom. 
+
+# Data tables
+
+### Crude 90-day mortality rates {-}
+
+The data table below includes the annual crude 90-day mortality rates following radical radiotherapy for England and NHS Trusts. NHS Trusts are identified as outliers on the basis of their crude 90-day mortality rate and flagged in the 'Outlier status' column. NHS Trusts are identified as High outliers if their crude 90-day mortality rate is greater than the upper 3SD limit and identified as Low outliers if their crude 90-day mortality rate is less than the lower 3SD limit.
+
+**To find your specific Trust please type a keyword into the search bar. The data table can also be filtered by financial year by typing the year in the search box. Each of the columns can also be sorted in ascending or descending order by clicking on the column title.**
+
+```{r}
+all_provider_table
+```
+
+------------------------------------------------------------------------
+
+## Trust Coverage {-}
+
+Over time the number of NHS Trusts that deliver radiotherapy has changed due to mergers or closures. The total number of NHS Trusts reported in the analysis changed from 50 in 2022/23 to 49 in 2023/24. Unless otherwise stated, historical data is reported under trust code and trust name as of March 2024 (the end of the analysis reporting period), not under the historic trust codes and names that existed during the time period that the data reports on. In addition, for this analysis, and in line with other RTDS Quality Metrics, The Christie NHS Foundation Trust (RBV) radiotherapy activity delivered at Salford Royal NHS Foundation Trust (RM3) was included and reported under The Christie NHS Foundation Trust. 
+
+Further details regarding data quality can be found in the supporting technical document. 
+
+
+# About the NDRS
+
+The National Disease Registration Service (NDRS) is part of NHS England (NHSE). Its purpose is to collect, collate and analyse data on patients with cancer, congenital anomalies, and rare diseases. It provides robust surveillance to monitor and detect changes in health and disease in the population. NDRS is a vital resource that helps researchers, healthcare professionals and policy makers make decisions about NHS services and the treatments people receive.
+  
+The NDRS includes:  
+  
+*   the National Cancer Registration and Analysis Service (NCRAS) and  
+*   the National Congenital Anomaly and Rare Disease Registration Service (NCARDRS)
+
+
+Healthcare professionals, researchers and policy makers use data to better understand population health and disease. The data is provided by patients and collected by the NHS as part of their care and support. The NDRS uses the data to help:   
+  
+*   understand cancer, rare diseases, and congenital anomalies
+*   improve diagnosis
+*   plan NHS services
+*   improve treatment
+*   evaluate policy
+*   improve genetic counselling
+
+## Contacts and Resources at NDRS {-}
+
+The National Disease Registration Service (NDRS) are making every effort to support each NHS Trust in achieving the highest levels of data quality in their RTDS submission. To support this aim, the following resources are available:
+
+### Your NDRS Data Liaison Manager {-}
+
+Your Data Liaison Manager can provide extensive support to improve the quality of data submitted to the National Disease Registration Service. Please contact the RTDS Helpdesk: [rtds.helpdesk@nhs.net](mailto:rtds.helpdesk@nhs.net) for further details.
+
+### NDRS Data Hub and Website {-}
+
+A single point of access for all NDRS related information including cancer data collection, datasets, supporting tools, training materials and guidance documents: <a href="https://digital.nhs.uk/ndrs/" target="_blank">NDRS Data Hub</a>. 
+
+### CancerStats2 {-}
+
+<a href="https://cancerstats.ndrs.nhs.uk/" target="_blank">CancerStats2</a> is a secure reporting platform that is only available to organisations with a HSCN connection. The platform hosts a variety of RTDS dashboards, including the radiotherapy quality metrics dashboard, the dose and fractionation dashboard and weekly updated operational data. In addition to RTDS data, the platform features dashboards reporting for cancer incidence and mortality, molecular and genetics and systemic anti-cancer therapy. CancerStats2 platform enables key stakeholders to generate reports using NDRS data on a self-service basis.
+
+If you do not currently have access, please contact the RTDS Helpdesk ([rtds.helpdesk@nhs.net](mailto:rtds.helpdesk@nhs.net)).

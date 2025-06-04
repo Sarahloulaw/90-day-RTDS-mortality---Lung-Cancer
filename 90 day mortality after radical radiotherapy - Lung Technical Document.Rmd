@@ -1,0 +1,329 @@
+---
+title: "![NDRS](./NDRS_NHS_96dpi.png) <br><br><br><br> Technical document: 90-day mortality after radical radiotherapy for lung cancers in England"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: true
+always_allow_html: yes
+---
+
+<style type="text/css">
+.main-container {
+  margin: auto;
+}
+body {
+text-align: justify}
+</style>
+
+
+```{r set-options, echo=FALSE, cache=FALSE}
+options(width = 1000)
+```
+
+```{css, echo=FALSE}
+.btn {
+    border-width: 0 0px 0px 0px
+    text-transform: 
+}
+.btn-default {
+    color: #2ecc71;
+    background-color: #ffffff
+    border-color: #ffffff
+}
+
+.dataTables_filter {
+   float: left !important;
+}
+
+img{
+  position: absolute;
+  right: 0; 
+  top: 0;
+  float: none;
+}
+
+h1{
+  font-family: Segoe UI Light;
+  font-weight: normal;
+}
+h2,h3,h4{
+  font-family: Segoe UI Light;
+  font-weight: normal;
+}
+TOC{
+  font-family: Arial Nova Light;
+  font-weight: normal;
+}
+p{
+  font-family: Arial;
+  font-weight: normal;
+} 
+
+
+```
+
+```{r setup, include=FALSE, echo=FALSE }
+# Set options for output
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,echo=FALSE)
+
+#knitr::opts_knit$set(root.dir = "R:/Analytical work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/4_Report")
+
+
+# Load libraries
+library(dplyr)
+#library(tidyverse) #I'm lazy
+library(crosstalk)
+library(data.table)
+library(DT)
+library(DiagrammeR)
+library(haven)
+library(htmltools)
+library(ggplot2)
+library(tidytext)
+library(gridExtra)
+library(ggpubr)
+library(readxl)
+library(plotly)
+#source(file.path(markdown_dir, "methodology_scripts.r"))
+
+#Predefined plotting colour palette, this should be colourblind friendly
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+```
+
+
+
+```{r, echo=FALSE, eval=FALSE}
+#NDRS Logo
+
+# htmltools::img(src = knitr::image_uri(file.path("R:/Analytical work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/4_Report/NDRS_Logo.png")),
+#                 alt = 'logo',
+#                style = 'float:none;top:0; right:0; padding:10px;width: 230px; height: 165px')
+#                #style = 'float:centre; top:0;  padding:10px; width: 230px; height: 165px')
+# htmltools::img(src = knitr::image_uri(file.path("R:/Analytical work/Sarah Lawton/90 day mortality/Development 2025/CAS2504/Production/4_Report/NHSD_Logo.png")),
+#                   alt = 'logo',
+#                  style = 'float:none; top:0; left:0; padding:10px;width: 230px; height: 165px')
+```
+
+
+
+The purpose of this document is to provide details of the methodology used to produce the 90-day mortality after radical radiotherapy metric and to support the interpretation of the data presented in the accompanying report, __90-day mortality after radical radiotherapy in England__. Each section consists of a set of tabs, please click on each tab to see more information. To navigate to a specific section of the documentation, please use the Contents list to the left-hand side of the page.
+
+
+------------------------------------------------------------------------
+
+# Introduction
+
+
+The __90-day mortality after radical radiotherapy in England__ report is produced by the National Disease Registration Service (NDRS) team as part of the NDRS RTDS Partnership with NHS England (NHSE) to support the NHS Long Term Plan and the Radiotherapy Transformation Plan. It presents the 90-day mortality after radical radiotherapy metric relating to patients with lung cancer treated in England. 
+
+This metric presented in this report is a quality indicator intended for assessing the appropriate and safe delivery of radical radiotherapy for lung cancer. Radical radiotherapy for lung cancer can result in life-threatening side-effects, particularly when combined with systemic anti-cancer therapy.  Equally, it must be recognised that patients with lung cancer often suffer with other significant medical conditions which either alone, or in combination with cancer treatment, can lead to death within 90 days of the start of radical radiotherapy. 
+
+The metric does not incorporate baseline patient characteristics (such as cancer stage, age or co-morbidity) or distinguish between treatment related and co-morbidity related death. Consequently, a provider with high use of radical radiotherapy (sometimes referred to as more aggressive treatment decision-making) may be found to have higher than expected 90-day mortality in the same way as one where support services are less robust than necessary. As such, where a provider is identified as outlying, there is a need to consider these factors when considering how best to incorporate this information into future decision-making and service planning.
+
+Crude 90-day mortality rates were calculated based on the first radical radiotherapy episode a patient had in a year and are reported for each financial year and individual NHS Trust. The crude 90-day mortality rate is the percentage of patients who died within 90 days of the start of their first radiotherapy episode in the financial year. This report provides an opportunity to review and improve clinical practice, and may identify any NHS Trust data submission issues. The RTDS team is committed to working with NHS Trusts to help address data submission issues if they are identified.
+
+
+
+------------------------------------------------------------------------
+
+# Methodology {.tabset .tabset-fade .tabset-pills}
+
+
+
+## Data sources {-}
+
+
+The National Cancer Registration and Analysis Service (NCRAS), part of the National Disease Registration Service (NDRS) within NHS England is responsible for the collection, quality assurance and analysis of radiotherapy data from all English NHS Acute Trust providers of radiotherapy (or private facilities where delivery is funded by the NHS). There are 49 NHS Acute Trusts delivering external beam radiotherapy in England. NCRAS receives monthly submissions of standardised radiotherapy activity data and produces the <a href="https://digital.nhs.uk/ndrs/data/data-sets/rtds/" target="_blank">Radiotherapy Data Set (RTDS)</a>. 
+
+For this report we used data from RTDS and focused on radiotherapy activity taking place between April 2022 and March 2024. The date of death for each patient comes from the <a href="https://digital.nhs.uk/services/demographics/" target="_blank">Personal Demographics Service</a> via the Demographics Batch Service. Certain restrictions (criteria) were applied to the data to ensure appropriate patients and treatments were selected for inclusion in the analysis. The details of the restrictions applied can be found in the Analysis Cohort section. These restrictions mean that some NHS Trusts may not have all of their data included in the report because their patients and patients’ treatment activity did not fit the criteria applied.
+
+
+------------------------------------------------------------------------
+
+## Analysis cohort {-}
+
+The analysis cohort contains 14,875 patients treated with radical radiotherapy which met the following inclusion criteria outlined below and had a treatment starting date within the selected time frame. 
+
+### Patient criteria {-}
+
+-   Aged 18 and over at the start of the radiotherapy episode
+-   Patients who received treatment at an English NHS Trust, including patients who were not residents in England at the time of diagnosis or treatment
+-   The patient had a valid English/Welsh NHS number
+
+### Treatment criteria {-}
+
+-   Radiotherapy treatment delivered between 1st April 2022 and 31st March 2024
+-   The treatment intent recorded by the clinician was radical
+-   The radiotherapy episode was delivered using external beam radiotherapy
+-   Radiotherapy was delivered for cancer defined by ICD10 codes: C33 - C34
+
+### Trust coverage {-}
+
+Over time the number of NHS Trusts that deliver radiotherapy has changed due to mergers or closures. The total number of NHS Trusts reported in the analysis changed from 50 in 2022/23 to 49 in 2023/24. Unless otherwise stated, historical data is reported under trust code and trust name as of March 2024 (the end of the analysis reporting period), not under the historic trust codes and names that existed during the time period that the data reports on. In addition, for this analysis, and in line with other RTDS Quality Metrics, The Christie NHS Foundation Trust (RBV) radiotherapy activity delivered at Salford Royal NHS Foundation Trust (RM3) was included and reported under The Christie NHS Foundation Trust. 
+
+------------------------------------------------------------------------
+
+
+## Analysis {-}
+
+
+
+### Patient approach {-}
+
+The analytical methodology for calculating the 90-day mortality following radical radiotherapy examines all radical radiotherapy episodes delivered to patients for lung cancer in a given financial year, with the metric calculated at a person level for each financial year. This patient approach, which is based on the patient's first radical radiotherapy episode in a year, was chosen as it accounts for the possibility of fragmented episodes, and clinically it is expected that a patient will only receive one radical episode in a year period (between 1.4% and 1.5% of patients had more than one radical radiotherapy episode for lung cancer in a year). Therefore, in the context of this analysis, 90-day mortality refers to the proportion of patients treated with radical radiotherapy for lung cancer where the patient died within 90 days of the start date of the first radical episode received in a given year. Patients can contribute to multiple yearly 90-day mortality rates if they had radical radiotherapy treatment for lung cancer starting in different years.
+
+
+
+### Flagging episodes where the patient died within 90 days {-}
+
+For every patient, we calculated the time interval between the patient's start date of their first radical episode in a given year and the death date of the patient receiving the episode of care or the recorded date of vital status for patients who were still alive (all alive patients had a vital status date of 5th January 2025 or later). From this, a 90-day mortality flag was then created for each patient to identify the patients who died within 90 days following the start of their first radical episode. It should be noted that this calculation includes deaths from all causes. This is because the cause of death can be misclassified, especially in relation to deaths during cancer treatment. In addition, clinical decision-making in radical radiotherapy should be holistic, recognising factors relating to the cancer, treatment and patient (including their prognosis and co-morbidities) in the decision to treat and to fractionate. As such, the decision was made to take an inclusive approach to cause of death for this report. 
+
+The analysis includes 4 (less than 0.1%) patients with radical radiotherapy episodes with a duration longer than 90 days, measured as the interval between the first and last appointment date in the episode. By definition, these patients can only contribute to the total number of radical episodes (denominator), and not to the total number of episodes where death occurred within 90 days (numerator). Whilst retrospectively it is clear that the patient survived beyond 90 days, prospectively this cannot be known. Therefore to ensure all clinical decisions were captured these patients' episodes were included in the analysis.
+
+
+
+### Crude 90-day mortality rates {-}
+
+We calculated yearly patient-level crude 90-day mortality rates for England and each English NHS Trust. The  90-day mortality rates were calculated by financial year based on the patient's first radical radiotherapy episode starting in the respective year. Patients were identified where the patient was reported to have died within 90 days, inclusive, of the start of the episode. The annual crude 90-day mortality rate was calculated as the observed proportion of patients treated with radical radiotherapy where the patient died within 90 days of the start of their first radical episode in a year out of the total number of patients treated with radical radiotherapy for lung cancer in a financial year. 
+  
+<br>
+$$
+\begin{align}
+\text{Crude 90-day Mortality Rate} = \frac{\text{The number of patients who died within 90 days of}\\\text{the start of their first radical episode in the financial year}}{\text{The total number of patients treated with}\\\text{radical radiotherapy for lung cancer in the financial year}} * 100 \\
+\end{align}
+$$
+<br>
+
+------------------------------------------------------------------------
+
+# Cohort flowchart 
+
+
+```{r}
+DiagrammeR::grViz("digraph{
+      
+      graph[layout = dot, rankdir = TB]
+      node[shape = box, fontname = Arial, fontsize = 28]
+      edge[arrowhead = vee]
+      
+      
+      main1 [label = <Number of lung cancer patients treated<br/>with radical radiotherapy<br/> <B>n = 14,888 </B> >]
+      main2 [label = <<B>n = 14,888 </B> >]
+      main3 [label = <<B>n = 14,887 </B> >]
+      main4 [label = <<B>n = 14,887</B> >]
+      main5 [label = <<B>n = 14,875</B> >]
+      main6 [label = <Qualifying patients  <br/><B>n = 14,875 </B> >]
+
+
+blank1 [label = '',width=0.01,height=0.01]
+right1 [label = <Patients where parent trust had less than 10 cases per year<br/> <B>n = 0 (0%)</B>>]
+
+blank2 [label = '',width=0.01,height=0.01]
+right2 [label = <Patients with episode duration longer than 5 months<br/> <B>n = 1 (Less than 0.1%)</B>>]
+
+blank3 [label = '',width=0.01,height=0.01]
+right3 [label = <Patient age was less than 18<br/> <B>n = 0 (0%)</B>>]
+
+blank4 [label = '',width=0.01,height=0.01]
+right4 [label = <Patients with missing or non-English/Welsh NHS number<br/> <B>n = 12 (Less than 0.1%)</B>>]
+
+blank5 [label = '',width=0.01,height=0.01]
+right5 [label = <Patient records with vital status or other data quality issues<br/> <B>n = 0 (0%)</B>>]
+
+
+main1 -> blank1[dir=none];
+blank1 -> right1[minlen=2];
+blank1 -> main2;
+{rank = same; blank1 right1}
+
+main2 -> blank2[dir=none];
+blank2 -> right2[minlen=2];
+blank2 -> main3;
+{rank = same; blank2 right2}
+      
+main3 -> blank3[dir=none];
+blank3 -> right3[minlen=2];
+blank3 -> main4;
+{rank = same; blank3 right3}
+
+main4 -> blank4[dir=none];
+blank4 -> right4[minlen=2];
+blank4 -> main5;
+{rank = same; blank4 right4}
+
+main5 -> blank5[dir=none];
+blank5 -> right5[minlen=2];
+blank5 -> main6[dir=none];
+{rank = same; blank5 right5}
+
+}")  
+
+```
+
+
+
+The data presented in this chart is for all NHS Trusts, including those Trusts with known data quality issues. 
+
+------------------------------------------------------------------------
+
+# Interpreting the data {.tabset .tabset-fade .tabset-pills}
+
+
+## Interpreting the rates {-}
+
+There is no 'target' 90-day mortality following radical radiotherapy, indeed, aiming for a 90-day mortality of 0% would inevitably result in under treatment of individuals who might otherwise stand to benefit from treatment. As such, a useful estimate of the expected rate is the national average.  Radical radiotherapy for lung cancer can result in life-threatening side-effects, particularly when combined with systemic anti-cancer therapy. Equally, it must be recognised that patients with lung cancer often suffer with other significant medical conditions which either alone, or in combination with cancer treatment, can lead to death within 90 days of the start of radical radiotherapy. The metric does not incorporate baseline patient characteristics (such as cancer stage, age or co-morbidity) or distinguish between treatment related and co-morbidity related death. Consequently, a provider with high use of radical radiotherapy (sometimes referred to as more aggressive treatment decision-making) may be found to have higher than expected 90-day mortality in the same way as one where support services are less robust than necessary. As such, where a provider is identified as outlying, there is a need to consider these factors when considering how best to incorporate this information into future decision-making and service planning. In all cases, an NHS Trust could be identified as an outlier due to data quality issues.
+
+
+### Crude 90-day mortality rates {-}
+
+Crude 90-day mortality after radical radiotherapy rates represent the observed proportion of patients treated with radical radiotherapy who died within 90 days of the start date of their first radiotherapy episode in a year. This is calculated for each NHS Trust on the radiotherapy episode data submitted to RTDS. This calculation does not take into account factors that may be associated with variation in mortality rate e.g. stage, age, comorbidity, etc. As such, crude rates are not recommended for directly comparing 90-day mortality rates between NHS Trusts.
+
+## Interpreting the funnel plot {-}
+
+### Funnel plot content {-}
+
+The funnel plot is used to visualise the 90-day mortality rates for the included NHS Trusts. The components of a funnel plot are listed below with a short description. 
+
+-   Each data point represents a NHS Trust
+-   Horizontal axis = the number of patients included in the analysis for each NHS Trust
+-   Vertical axis = the calculated crude 90-day mortality rate
+-   Solid horizontal line = the average crude 90-day mortality rate for all NHS Trusts, calculated from all patients included in the analysis. This is the England average
+-   Dashed lines = the 2 standard deviations control limits (&asymp; &pm; 95% control limits)
+-   Dotted lines = the 3 standard deviations control limits (&asymp; &pm; 99.8% control limits)
+
+
+### Control Limits and Outliers {-}
+
+Control limits define the statistical upper and lower limits within which variation can be expected to fall given the number of patients observed (this recognises that with smaller numbers of patients the expected variation will be greater). Points which fall outside of these limits indicate unexpected variation. The 3 standard deviation (SD) control limits imply that 99.8% of all NHS Trusts are expected to be within that range. A rate outside the 3SD control limits would correspond to the rate being statistically significantly different from English average rate (at a two-sided significance level of 0.002). 
+
+The control limits are calculated from the England average rate, varying in line with the observed number of episodes per NHS Trust. Control limits are presented for crude 90-day mortality funnel plots but __only Trusts with adjusted 90-day mortality falling outside the 3 standard deviation (99.8%) control limits are identified as outliers__:
+
+-   NHS Trusts with 90-day mortality greater than the upper 3SD (99.8%) control limit are defined as a "High Outlier"
+-   NHS Trusts with 90-day mortality less than the lower 3SD (99.8%) control limit are defined as a "Low Outlier"
+
+
+NHS Trusts that are identified as outliers for the crude 90-day mortality rate will be notified of this. All NHS Trusts are given the opportunity to respond to the RTDS team prior to this information being published on CancerStats2.
+
+Further information on funnel plots can be found in:
+
+-   <a href="https://onlinelibrary.wiley.com/doi/10.1002/sim.1970" target="_blank">Funnel plots for comparing institutional performance. Spiegelhalter (2005)</a>
+-   <a href="https://fingertips.phe.org.uk/documents/TechnicalBriefing2Statisticalprocesscontrolmetho.pdf" target="_blank">Statistical process control methods in public health intelligence</a>
+
+
+
+------------------------------------------------------------------------
+
+# Communicating the reports
+
+The report will be sent to Radiotherapy Managers on Monday 30th June 2025, alongside the methodology and guidance on data interpretation. We encourage you to review your data and get back to us at [rtds.helpdesk@nhs.net](mailto:rtds.helpdesk@nhs.net) with any queries or feedback. We are happy to arrange a call to discuss your data, the methodology and any other queries you may have.
+
+Following a review period, we will publish the analysis on our online reporting platform, <a href="https://cancerstats.ndrs.nhs.uk" target="_blank">CancerStats2</a>. This platform is accessible to those with a Health and Social Care Network (HSCN) connection (previously the N3 network) and an approved CancerStats2 account. The crude 90-day mortality rates will also be shared with the NHS England QCRS Team who are responsible for managing the Specialised Services Quality Dashboards.
+
+We wish to handle this publication sensitively with the support of the clinical community and therefore welcome you to provide comments for inclusion alongside the published report. If you would like to provide a comment, please agree a statement locally and send this to us at [rtds.helpdesk@nhs.net](mailto:rtds.helpdesk@nhs.net) by the date stated in the associated email. All comments will be published alongside the 90-day mortality metric on CancerStats2 and may also be shared with the QCRS Team.
+
+If you have any queries in the meantime, please do not hesitate to contact us at [rtds.helpdesk@nhs.net](mailto:rtds.helpdesk@nhs.net).
